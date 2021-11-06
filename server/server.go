@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -17,15 +19,23 @@ type SyncFileClient interface {
 	SyncFileOfBranch(org, repo, branch, branchSHA string, files []string) error
 }
 
-func DoOnce(clients map[string]SyncFileClient, cfg []SyncFileConfig) {
+func DoOnce(clients map[string]SyncFileClient, cfg []SyncFileConfig, concurrentSize int) (func(), func()) {
 	w := worker{
 		clients: clients,
-		queue:   newTaskQueue(1000),
+		queue:   newTaskQueue(concurrentSize),
 	}
 
-	w.produce(cfg, 3)
-	w.consume()
-	w.wait()
+	logrus.Info("start doing once")
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	w.produce(ctx, cfg)
+	// there are 3 kinds of task.
+	for i := 0; i < 3; i++ {
+		w.consume(ctx)
+	}
+
+	return w.wait, cancel
 }
 
 type worker struct {
@@ -39,139 +49,68 @@ func (w *worker) wait() {
 	w.wg.Wait()
 }
 
-func (w *worker) produce(cfg []SyncFileConfig, maxRetry int) {
+func (w *worker) produce(ctx context.Context, cfg []SyncFileConfig) {
 	w.wg.Add(1)
 	go func() {
 		defer w.wg.Done()
 
-		w.sendTask(cfg, 0, maxRetry)
-		w.pushTask(taskInfo{exit: true})
-	}()
-}
-
-func (w *worker) sendTask(cfg []SyncFileConfig, num, maxRetry int) {
-	if num == maxRetry {
-		return
-	}
-
-	failed := []SyncFileConfig{}
-
-	task := taskInfo{}
-	for i := range cfg {
-		item := &cfg[i]
-
-		cli := w.getClient(item.Platform)
-		if cli == nil {
-			continue
-		}
-
-		task.platform = item.Platform
-		task.files = item.FileNames
-
-		failedRepo := []string{}
-		gtf := func() {
-			if err := w.genTask(task, cli); err != nil {
-				failedRepo = append(failedRepo, genRepoName(task.org, task.repo))
-			}
-		}
-
-		for _, v := range item.Repos {
-			if org, repo := parseRepo(v); repo != "" {
-				task.org = org
-				task.repo = repo
-				gtf()
-			} else {
-				repos, err := cli.ListRepos(org)
-				if err != nil {
-					logrus.WithError(err).Errorf("list repos:%s/%s", task.platform, task.org)
-					failedRepo = append(failedRepo, org)
-					continue
-				}
-
-				task.org = org
-
-				for _, repo := range repos {
-					if !item.isExcluded(org, repo) {
-						task.repo = repo
-						gtf()
-					}
-				}
-			}
-		}
-
-		if len(failedRepo) > 0 {
-			v := *item
-			v.Repos = failedRepo
-			failed = append(failed, v)
-		}
-	}
-
-	if len(failed) > 0 {
-		w.sendTask(failed, num+1, maxRetry)
-	}
-}
-
-func (w *worker) genTask(task taskInfo, cli SyncFileClient) error {
-	branches, err := cli.ListBranchOfRepo(task.org, task.repo)
-	if err != nil {
-		logrus.WithError(err).Errorf("list branch of repo:%s/%s/%s", task.platform, task.org, task.repo)
-		return err
-	}
-
-	for _, item := range branches {
-		task.branch = item.Name
-		task.branchSHA = item.SHA
-		w.pushTask(task)
-	}
-	return nil
-}
-
-func (w *worker) getClient(platform string) SyncFileClient {
-	if c, b := w.clients[platform]; b {
-		return c
-	}
-	return nil
-}
-
-func (w *worker) pushTask(t taskInfo) {
-	w.queue.push(&t)
-}
-
-func (w *worker) consume() {
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
-
-		t := new(taskInfo)
-		for {
-			w.popTask(t)
-			if t.exit {
+		for i := range cfg {
+			if isCancelled(ctx) {
 				break
 			}
 
-			w.runTask(t)
+			item := &cfg[i]
+
+			if cli, ok := w.clients[item.Platform]; !ok {
+				logrus.Warningf("generate tasks, no client for platform:", item.Platform)
+			} else {
+				w.kickoff(ctx, item, cli)
+			}
 		}
+
+		logrus.Info("generate tasks done")
 	}()
 }
 
-func (w *worker) runTask(t *taskInfo) {
-	cli := w.getClient(t.platform)
-	if cli == nil {
-		return
+func (w *worker) kickoff(ctx context.Context, cfg *SyncFileConfig, cli SyncFileClient) {
+	task := &taskInfo{
+		ctx:      ctx,
+		platform: cfg.Platform,
+		files:    cfg.FileNames,
+		cli:      cli,
 	}
 
-	var err error
-	for i := 0; i < 3; i++ {
-		err = cli.SyncFileOfBranch(
-			t.org, t.repo, t.branch, t.branchSHA, t.files,
-		)
-		if err == nil {
-			return
+	for i := range cfg.OrgRepos {
+		if isCancelled(ctx) {
+			break
 		}
+
+		task.cfg = &cfg.OrgRepos[i]
+		w.queue.push(ctx, task)
+		logrus.Infof("generate list repo task for org%s", task.cfg.Org)
 	}
-	logrus.WithField("task", t.toString()).WithError(err).Error("sync file of branch")
 }
 
-func (w *worker) popTask(t *taskInfo) {
-	w.queue.pop(t)
+func (w *worker) consume(ctx context.Context) {
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+
+		e := &taskExecutor{
+			queue:       w.queue,
+			maxRetry:    3,
+			waitOnQueue: 10 * time.Millisecond,
+			idleTimeOut: 3 * time.Second,
+		}
+		e.run(ctx)
+	}()
+}
+
+func isCancelled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }

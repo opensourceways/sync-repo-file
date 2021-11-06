@@ -1,37 +1,49 @@
 package server
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 type SyncFileConfig struct {
 	// Platform is the code platform.
 	Platform string `json:"platform" required:"true"`
 
-	// Repos is either in the form of org/repos or just org.
-	Repos []string `json:"repos" required:"true"`
-
-	// ExcludedRepos is in the form of org/repo.
-	ExcludedRepos []string `json:"excluded_repos" required:"true"`
-
 	// FileNames is the list of files to be synchronized.
 	FileNames []string `json:"file_names" required:"true"`
+
+	OrgRepos []OrgRepos `json:"org_repos,omitempty"`
 }
 
-func (s SyncFileConfig) isExcluded(org, repo string) bool {
-	return false
-}
-
-// the returned valude are org, repo.
-func parseRepo(s string) (string, string) {
-	s1 := strings.Trim(s, "/")
-	if v := strings.Split(s1, "/"); len(v) == 2 {
-		return v[0], v[1]
+func (s *SyncFileConfig) Validate() error {
+	if s.Platform == "" {
+		return fmt.Errorf("must set platform")
 	}
-	return s1, ""
+
+	if len(s.FileNames) == 0 {
+		return fmt.Errorf("must set file_names")
+	}
+
+	for _, item := range s.OrgRepos {
+		if err := item.validate(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
-func genRepoName(org, repo string) string {
-	return fmt.Sprintf("%s/%s", org, repo)
+type OrgRepos struct {
+	Org           string   `json:"org" required:"true"`
+	Repos         []string `json:"repos,omitempty"`
+	ExcludedRepos []string `json:"excluded_repos,omitempty"`
+}
+
+func (o OrgRepos) validate() error {
+	if o.Org == "" {
+		return fmt.Errorf("must set org")
+	}
+
+	if len(o.Repos) > 0 && len(o.ExcludedRepos) > 0 {
+		return fmt.Errorf("can't set repos and excluded_repos for org:%s at same time", o.Org)
+	}
+
+	return nil
 }

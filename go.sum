@@ -169,9 +169,9 @@ github.com/onsi/ginkgo v1.14.0/go.mod h1:iSB4RoI2tjJc9BBv4NKIKWKya62Rps+oPG/Lv9k
 github.com/onsi/gomega v0.0.0-20170829124025-dcabb60a477c/go.mod h1:C1qb7wdrVGGVU+Z6iS04AVkA3Q65CEZX59MT0QO5uiA=
 github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7JYyY=
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
+github.com/opensourceways/community-robot-lib v0.0.0-20211104030736-86ff3ae014ec h1:Ejrb1NApCIn/chFxTKZxPYMHu12dMX+IsQ7xq4uOJIs=
+github.com/opensourceways/community-robot-lib v0.0.0-20211104030736-86ff3ae014ec/go.mod h1:wVOxCg37uLrVNcOy/aTh/ip/sSVizPxjhONqqfGERK0=
 github.com/opensourceways/robot-gitee-plugin-lib v0.0.0-20210911062539-882a7b92e588/go.mod h1:2ht3IyZ8HdkqEzsmIdMn27JrpzQxWy8ClS3ZFCkG+vU=
-github.com/opensourceways/robot-gitee-plugin-lib v0.0.0-20211014110335-f14845469d4f h1:5mGTOpExWU0Cl4wZzZim8GKXGV5F41lc2F29bNHfQVU=
-github.com/opensourceways/robot-gitee-plugin-lib v0.0.0-20211014110335-f14845469d4f/go.mod h1:2ht3IyZ8HdkqEzsmIdMn27JrpzQxWy8ClS3ZFCkG+vU=
 github.com/opensourceways/sync-file-server v0.0.0-20211018035106-b26bdd2edd5e h1:HbT5r5eFunOUMNZuBB3Lhz+v/Ljg+oUTtqoSuGwq93M=
 github.com/opensourceways/sync-file-server v0.0.0-20211018035106-b26bdd2edd5e/go.mod h1:s0gap+wZ3BYngrfoibSKEu/6vS87x1cXF24O0EqMf+Y=
 github.com/panjf2000/ants/v2 v2.4.6/go.mod h1:f6F0NZVFsGCp5A7QW/Zj/m92atWwOkY0OIhFxRNFr4A=
