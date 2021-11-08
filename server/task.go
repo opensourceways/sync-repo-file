@@ -24,10 +24,16 @@ type taskInfo struct {
 }
 
 func (t taskInfo) toString() string {
+	org := t.org
+	if t.cfg != nil {
+		org = t.cfg.Org
+	}
+
 	return fmt.Sprintf(
-		"org:%s, repo:%s, branch:%s, branch sha:%s, files:%s",
-		t.org, t.repo, t.branch, t.branchSHA,
+		"org:%s, repo:%s, branch:%s, branch sha:%s, files:%s, retry number:%d",
+		org, t.repo, t.branch, t.branchSHA,
 		strings.Join(t.files, ", "),
+		t.retryNum,
 	)
 }
 
@@ -97,10 +103,6 @@ func (w *taskExecutor) run(ctx context.Context) {
 	defer w.timer.Stop()
 
 	for {
-		if isCancelled(ctx) {
-			break
-		}
-
 		if !w.queue.popWithTimeOut(ctx, t, w.timer) {
 			logrus.Info("executor exits")
 			break
@@ -108,7 +110,7 @@ func (w *taskExecutor) run(ctx context.Context) {
 
 		w.execTask(t)
 
-		w.timer.Reset(w.waitOnQueue)
+		w.timer.Reset(w.idleTimeOut)
 	}
 }
 
@@ -152,12 +154,13 @@ func (w *taskExecutor) listRepos(t *taskInfo) {
 
 	for _, repo := range repos {
 		nt.repo = repo
-		if !w.pushTask(nt) {
-			w.execTask(nt)
-		}
 
-		if isCancelled(t.ctx) {
-			break
+		if !w.pushTask(nt) {
+			if isCancelled(nt.ctx) {
+				break
+			}
+
+			w.listBranch(nt)
 		}
 	}
 }
@@ -193,12 +196,13 @@ func (w *taskExecutor) listBranch(t *taskInfo) {
 	for _, b := range branches {
 		nt.branch = b.Name
 		nt.branchSHA = b.SHA
-		if !w.pushTask(nt) {
-			w.execTask(nt)
-		}
 
-		if isCancelled(t.ctx) {
-			break
+		if !w.pushTask(nt) {
+			if isCancelled(nt.ctx) {
+				break
+			}
+
+			w.syncFile(nt)
 		}
 	}
 }
@@ -216,17 +220,12 @@ func (w *taskExecutor) syncFile(t *taskInfo) {
 }
 
 func (w *taskExecutor) try(t *taskInfo, tryOnce func(t *taskInfo) error) error {
-	if isCancelled(t.ctx) {
-		return fmt.Errorf("the task is cancelled")
-	}
-
 	err := tryOnce(t)
 	if err == nil {
 		return nil
 	}
 
-	t.retryNum += 1
-	if t.retryNum >= w.maxRetry {
+	if t.retryNum++; t.retryNum >= w.maxRetry {
 		return fmt.Errorf("excced max retry")
 	}
 
@@ -234,11 +233,15 @@ func (w *taskExecutor) try(t *taskInfo, tryOnce func(t *taskInfo) error) error {
 		return err
 	}
 
+	if isCancelled(t.ctx) {
+		return fmt.Errorf("recieving signal to stop executing task")
+	}
+
 	return w.try(t, tryOnce)
 }
 
 func (w *taskExecutor) pushTask(t *taskInfo) bool {
-	logrus.Infof("generate task:%s", t.toString())
+	logrus.Infof("push task:%s", t.toString())
 
 	w.timer.Reset(w.waitOnQueue)
 	return w.queue.pushWithTimeOut(t.ctx, t, w.timer)

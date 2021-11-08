@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -78,22 +79,21 @@ func main() {
 }
 
 func run(wait, cancel func()) {
-	done := make(chan struct{})
 	sig := make(chan os.Signal, 1)
-
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 
 	var wg sync.WaitGroup
-	defer func() {
-		wg.Wait()
-	}()
+	defer wg.Wait()
+
+	ctx, done := context.WithCancel(context.Background())
+	defer done()
 
 	wg.Add(1)
-	go func() {
+	go func(ctx context.Context) {
 		defer wg.Done()
 
 		select {
-		case <-done:
+		case <-ctx.Done():
 			logrus.Info("receive done. exit normally")
 			return
 		case <-sig:
@@ -101,10 +101,9 @@ func run(wait, cancel func()) {
 			cancel()
 			return
 		}
-	}()
+	}(ctx)
 
 	wait()
-	close(done)
 }
 
 func initClients(cfg []clientConfig) map[string]*client.SyncFileClient {
@@ -115,13 +114,12 @@ func initClients(cfg []clientConfig) map[string]*client.SyncFileClient {
 			continue
 		}
 
-		cli, err := client.NewSyncFileClient(item.Endpoint)
-		if err != nil {
+		if cli, err := client.NewSyncFileClient(item.Endpoint); err == nil {
+			clients[item.Platform] = cli
+		} else {
 			logrus.WithField("enpoint", item.Endpoint).WithError(err).Infof(
 				"init sync file client for platform:%s", item.Platform,
 			)
-		} else {
-			clients[item.Platform] = cli
 		}
 	}
 	return clients
@@ -140,8 +138,5 @@ func loadConfig(path string) (*configuration, error) {
 
 	v.SetDefault()
 
-	if err := v.Validate(); err != nil {
-		return nil, err
-	}
-	return v, nil
+	return v, v.Validate()
 }

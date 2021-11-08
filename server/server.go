@@ -62,7 +62,7 @@ func (w *worker) produce(ctx context.Context, cfg []SyncFileConfig) {
 			item := &cfg[i]
 
 			if cli, ok := w.clients[item.Platform]; !ok {
-				logrus.Warningf("generate tasks, no client for platform:", item.Platform)
+				logrus.Warningf("generate tasks, no client for platform:%s", item.Platform)
 			} else {
 				w.kickoff(ctx, item, cli)
 			}
@@ -87,7 +87,7 @@ func (w *worker) kickoff(ctx context.Context, cfg *SyncFileConfig, cli SyncFileC
 
 		task.cfg = &cfg.OrgRepos[i]
 		w.queue.push(ctx, task)
-		logrus.Infof("generate list repo task for org%s", task.cfg.Org)
+		logrus.Infof("generate list repo task for org:%s", task.cfg.Org)
 	}
 }
 

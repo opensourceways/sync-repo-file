@@ -10,7 +10,7 @@ type configuration struct {
 func (c *configuration) Validate() error {
 	for _, item := range c.SyncFiles {
 		if err := item.Validate(); err != nil {
-			return nil
+			return err
 		}
 	}
 	return nil
