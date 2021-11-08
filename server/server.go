@@ -75,9 +75,9 @@ func (w *worker) produce(ctx context.Context, cfg []SyncFileConfig) {
 func (w *worker) kickoff(ctx context.Context, cfg *SyncFileConfig, cli SyncFileClient) {
 	task := &taskInfo{
 		ctx:      ctx,
-		platform: cfg.Platform,
-		files:    cfg.FileNames,
 		cli:      cli,
+		files:    cfg.FileNames,
+		platform: cfg.Platform,
 	}
 
 	for i := range cfg.OrgRepos {

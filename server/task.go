@@ -11,17 +11,16 @@ import (
 )
 
 type taskInfo struct {
+	cfg       *OrgRepos
 	ctx       context.Context
+	cli       SyncFileClient
 	platform  string
 	org       string
 	repo      string
 	branch    string
 	branchSHA string
 	files     []string
-	cfg       *OrgRepos
 	retryNum  int
-	cli       SyncFileClient
-	exit      bool
 }
 
 func (t taskInfo) toString() string {
@@ -145,9 +144,10 @@ func (w *taskExecutor) listRepos(t *taskInfo) {
 
 	nt := &taskInfo{
 		ctx:      t.ctx,
+		cli:      t.cli,
+		files:    t.files,
 		platform: t.platform,
 		org:      t.cfg.Org,
-		files:    t.files,
 	}
 
 	for _, repo := range repos {
@@ -183,10 +183,11 @@ func (w *taskExecutor) listBranch(t *taskInfo) {
 
 	nt := &taskInfo{
 		ctx:      t.ctx,
+		cli:      t.cli,
+		files:    t.files,
 		platform: t.platform,
 		org:      t.org,
 		repo:     t.repo,
-		files:    t.files,
 	}
 
 	for _, b := range branches {
