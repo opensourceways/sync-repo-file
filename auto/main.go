@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/opensourceways/robot-gitee-plugin-lib/config"
-	"github.com/opensourceways/robot-gitee-plugin-lib/interrupts"
-	"github.com/opensourceways/robot-gitee-plugin-lib/logrusutil"
-	"github.com/opensourceways/robot-gitee-plugin-lib/utils"
+	"github.com/opensourceways/community-robot-lib/config"
+	"github.com/opensourceways/community-robot-lib/interrupts"
+	"github.com/opensourceways/community-robot-lib/logrusutil"
+	"github.com/opensourceways/community-robot-lib/utils"
 	"github.com/sirupsen/logrus"
 
 	"github.com/opensourceways/sync-repo-file/client"
@@ -17,9 +17,10 @@ import (
 )
 
 type options struct {
-	configFile string
-	startTime  string
-	interval   int
+	configFile     string
+	startTime      string
+	interval       int
+	concurrentSize int
 }
 
 func (o options) validate() error {
@@ -63,6 +64,7 @@ func gatherOptions(fs *flag.FlagSet, args ...string) options {
 	fs.StringVar(&o.configFile, "config-file", "", "Path to the config file.")
 	fs.StringVar(&o.startTime, "start-time", "01:00", "Time to synchronize repo file for the first time. The format is Hour:Minute")
 	fs.IntVar(&o.interval, "interval", 24, "Interval between two synchronizations. The unit is hour")
+	fs.IntVar(&o.concurrentSize, "concurrent-size", 500, "The concurrent size for synchronizing files of repo branch.")
 
 	fs.Parse(args)
 	return o
@@ -106,7 +108,8 @@ func main() {
 		for k, v := range clients {
 			clis[k] = v
 		}
-		server.DoOnce(clis, cfg.SyncFiles)
+		logrus.Info("start")
+		server.DoOnce(clis, cfg.SyncFiles, o.concurrentSize)
 	}
 
 	time.Sleep(o.getStartTime())
